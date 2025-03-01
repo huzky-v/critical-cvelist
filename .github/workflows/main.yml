@@ -1,0 +1,47 @@
+name: Create Zipped Release for critical
+
+on:
+  push:
+    tags:
+      - '*'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set current date
+        id: date
+        run: |
+          CURRENT_DATE=$(date +'%Y-%m-%d')
+          CURRENT_YEAR=$(date +'%Y')
+          echo "CURRENT_DATE=$CURRENT_DATE" >> $GITHUB_ENV
+          echo "CURRENT_YEAR=$CURRENT_YEAR" >> $GITHUB_ENV
+
+      - name: Create zip for each new/update
+        run: |
+          mkdir -p artifacts-cve
+          cd $CURRENT_YEAR/$CURRENT_DATE
+          zip -r ../../artifacts-cve/new.zip new
+          zip -r ../../artifacts-cve/update.zip update
+
+      - name: Get update folder filenames
+        id: update_files
+        run: |
+          NEW_FILES=$(find $CURRENT_YEAR/$CURRENT_DATE/new -type f -exec basename {} \; | sed 's/\.json$//' | paste -sd "," -)
+          NEW_CVE_COUNT=$(echo "$NEW_FILES" | awk -F "," '{print NF}')
+          UPDATE_FILES=$(find $CURRENT_YEAR/$CURRENT_DATE/update -type f -exec basename {} \; | sed 's/\.json$//' | paste -sd "," -)
+          UPDATE_CVE_COUNT=$(echo "$UPDATE_FILES" | awk -F "," '{print NF}')
+          echo "NEW_FILES=$NEW_FILES" >> $GITHUB_ENV
+          echo "UPDATE_FILES=$UPDATE_FILES" >> $GITHUB_ENV
+          echo "NEW_CVE_COUNT=$NEW_CVE_COUNT" >> $GITHUB_ENV
+          echo "UPDATE_CVE_COUNT=$UPDATE_CVE_COUNT" >> $GITHUB_ENV
+      - name: Publish Release
+        uses: ncipollo/release-action@v1
+        with:
+          artifacts: "artifacts-cve/*.zip"
+          body: "${{env.NEW_CVE_COUNT}} new CVEs: \n ${{env.NEW_FILES}}\n\n ${{env.UPDATE_CVE_COUNT}} updated CVEs: \n${{env.UPDATE_FILES}}"
